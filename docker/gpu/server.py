@@ -52,7 +52,9 @@ import models
 import vram
 from handlers import NAMES
 
-VERSION = "1.30"
+VERSION = "1.31"
+BOOT = secrets.token_hex(4)   # 1.31: cambia en cada arranque (si el proceso muere y RunPod lo reinicia, Cinestoria lo sabe)
+STARTED = time.time()
 KEEP_S = 900.0        # lo que se guarda un resultado ya recogido
 KEEP_UNFETCHED_S = 3600.0
 MAX_KEPT = 500
@@ -277,6 +279,18 @@ def _module_loaded(mod) -> list[str]:
         return []
 
 
+def _ram_gb() -> dict:
+    """1.31: la memoria del pod (total y libre, GB), para entender un reinicio por falta de memoria."""
+    try:
+        info = {}
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            k, v = line.split(":", 1)
+            info[k] = int(v.split()[0]) / 1024 / 1024
+        return {"total": round(info.get("MemTotal", 0), 1), "libre": round(info.get("MemAvailable", 0), 1)}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def create_app(token: str | None = None, fake: bool | None = None, preload: bool = True) -> FastAPI:
     tok = os.environ.get("CINESTORIA_TOKEN", "") if token is None else token
     if fake is not None:
@@ -381,7 +395,7 @@ def create_app(token: str | None = None, fake: bool | None = None, preload: bool
                 return JSONResponse({"error": "el cuerpo tiene que ser un objeto JSON"}, status_code=400)
             if "respond-async" in (request.headers.get("prefer") or "").lower():
                 jid, _ = submit(path, req, True)
-                return JSONResponse({"job": jid, "id": jid, "state": "queued"}, status_code=202)
+                return JSONResponse({"job": jid, "id": jid, "state": "queued", "boot": BOOT}, status_code=202)
             jid, job = submit(path, req, False)
             await run_in_threadpool(run, job, name, fn, req)
             with lock:
@@ -408,6 +422,7 @@ def create_app(token: str | None = None, fake: bool | None = None, preload: bool
         notes = {k: [str(x) for x in getattr(m, "NOTES", [])][:20] for k, m in mods.items() if getattr(m, "NOTES", None)}
         return {"ok": True, "gpu": vram.gpu_name(), "vram_gb": vram.total_gb(), "loaded": loaded,
                 "version": VERSION, "fake": os.environ.get("CINESTORIA_FAKE") == "1",
+                "boot": BOOT, "uptime_s": round(time.time() - STARTED, 1), "ram_gb": _ram_gb(),
                 "idle_s": 0.0 if n else round(time.time() - activity["t"], 1), "jobs": n,
                 "weights": models.status(), "handlers": {**{k: "ok" for k in mods}, **errors},
                 "routes": sorted(table), "notes": notes}
@@ -448,7 +463,7 @@ def create_app(token: str | None = None, fake: bool | None = None, preload: bool
         if path not in table or not isinstance(payload, dict):
             return JSONResponse({"error": f"ruta desconocida o sin payload: {path}"}, status_code=400)
         jid, _ = submit(path, payload, True)
-        return JSONResponse({"id": jid, "job": jid, "state": "queued"}, status_code=202)
+        return JSONResponse({"id": jid, "job": jid, "state": "queued", "boot": BOOT}, status_code=202)
 
     @app.get("/jobs/{jid}")
     def job_state(jid: str):
