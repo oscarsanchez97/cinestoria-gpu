@@ -1,0 +1,6 @@
+# 1.30: la música (handlers/music.py: ACE-Step 1.5) va en su propio entorno, /opt/acestep/.venv: ACE-Step fija
+# torch 2.10.0+cu128 y transformers < 4.58 (Chatterbox, 5.2.0) y se instala con «uv sync» desde su repositorio, en el
+# commit ARG ACESTEP_REF del Dockerfile (por defecto «main»; mejor fijarlo a un commit probado). Aquí, lo que el
+# servidor (server.py, models.py) necesita además para arrancar en ese entorno (fastapi y uvicorn ya vienen con
+# ACE-Step).
+requests==2.34.2

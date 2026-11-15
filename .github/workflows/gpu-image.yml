@@ -1,0 +1,86 @@
+# 1.30: construye y sube a GHCR la imagen pública del worker de la GPU (docker/gpu), la que arrancan los pods de RunPod.
+# - Con cada etiqueta «gpu-v*» (git tag gpu-v1.30.0 && git push origin gpu-v1.30.0) y a mano (Actions → «Imagen GPU»
+#   → Run workflow). No corre en cada push: la imagen pesa unos 16 GB y tarda.
+# - Sale como ghcr.io/<dueño del repositorio>/cinestoria-gpu:<versión> (y :latest si pasa las comprobaciones). La primera vez, en GitHub →
+#   Packages → cinestoria-gpu → Package settings → Change visibility → Public (RunPod la baja sin credenciales).
+# - En Cinestoria: NARRA_GPU_IMAGE=ghcr.io/<dueño>/cinestoria-gpu:1.30.0 en el .env del servidor.
+name: Imagen GPU
+
+on:
+  push:
+    tags: ["gpu-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión de la imagen (por ejemplo 1.30.0)"
+        required: true
+        default: "1.30.0"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Hacer sitio en el disco (CUDA y torch ocupan mucho)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
+      - uses: actions/checkout@v4
+
+      - name: Versión
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then V="${{ github.event.inputs.version }}"; else V="${GITHUB_REF_NAME#gpu-v}"; fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/cinestoria-gpu" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: docker/gpu
+          file: docker/gpu/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}
+          labels: |
+            org.opencontainers.image.title=cinestoria-gpu
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Comprobar que se importa todo (sin GPU)
+        run: |
+          IMG="${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}"
+          docker run --rm "$IMG" python -c "import torch, torchaudio, diffusers, transformers, peft, spandrel, chatterbox.mtl_tts; print('torch', torch.__version__, 'diffusers', diffusers.__version__, 'transformers', transformers.__version__)"
+          docker run --rm "$IMG" /opt/qwen/bin/python -c "import qwen_tts, transformers; print('qwen-tts con transformers', transformers.__version__)"
+          docker run --rm "$IMG" /opt/acestep/.venv/bin/python -c "import acestep, fastapi, uvicorn, requests, torch, transformers; from acestep.handler import AceStepHandler; from acestep.inference import generate_music; print('ACE-Step con torch', torch.__version__, 'y transformers', transformers.__version__)"
+          docker run --rm "$IMG" sh -c "ffmpeg -hide_banner -encoders | grep -q libx264 && echo 'ffmpeg con libx264' && test -d /opt/Practical-RIFE && echo 'Practical-RIFE'"
+          docker run --rm -e CINESTORIA_FAKE=1 -e CINESTORIA_NO_PRELOAD=1 "$IMG" python -c "import server; print('handlers:', sorted(server.app.state.handlers))"
+
+      - name: Probar la imagen sin GPU (modo de pruebas)
+        run: |
+          docker run -d --name w -p 8000:8000 -e CINESTORIA_TOKEN=prueba -e CINESTORIA_FAKE=1 -e CINESTORIA_NO_PRELOAD=1 "${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}"
+          for i in $(seq 1 30); do curl -fsS -H "Authorization: Bearer prueba" http://localhost:8000/health && break; sleep 2; done
+          curl -fsS -H "Authorization: Bearer prueba" -H "Content-Type: application/json" \
+            -d '{"prompt":"faro","width":256,"height":144}' http://localhost:8000/image | head -c 200; echo
+          # la música va por su propio Python (otro proceso): también en el modo de pruebas
+          curl -fsS -H "Authorization: Bearer prueba" -H "Content-Type: application/json" \
+            -d '{"prompt":"calm piano","seconds":4}' http://localhost:8000/music | head -c 200; echo
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health)" = "401"
+          docker rm -f w
+
+      - name: Marcar como «latest» (solo si todo lo anterior ha ido bien)
+        run: docker buildx imagetools create -t "${{ steps.v.outputs.image }}:latest" "${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}"

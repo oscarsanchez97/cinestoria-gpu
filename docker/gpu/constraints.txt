@@ -1,0 +1,9 @@
+# 1.30: las versiones del entorno del worker de la GPU (lo que no puede cambiar ninguna dependencia de un handler)
+torch==2.14.1
+torchvision==0.29.1
+torchaudio==2.11.1
+transformers==5.2.0
+diffusers==0.42.1
+accelerate==1.15.0
+huggingface_hub==1.33.0
+hf-xet==1.7.1

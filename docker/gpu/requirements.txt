@@ -1,0 +1,9 @@
+# 1.30: lo común del worker de la GPU (servidor y pesos). torch, en el Dockerfile; las versiones fijas, en constraints.txt.
+# Cada handler añade lo suyo en requirements-<handler>.txt (image, tts, music, clip).
+fastapi==0.162.0
+uvicorn==0.54.0
+huggingface_hub==1.33.0
+hf-xet==1.7.1
+pillow==13.0.0
+soundfile==0.14.0
+requests==2.34.2

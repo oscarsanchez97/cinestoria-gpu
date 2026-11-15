@@ -1,0 +1,7 @@
+# 1.30: las imágenes (handlers/image.py: Qwen-Image-2512 y Qwen-Image-Edit-2511 con diffusers, Real-ESRGAN con spandrel)
+diffusers==0.42.1
+transformers==5.2.0
+accelerate==1.15.0
+peft==0.21.2
+spandrel==0.4.2
+psutil==7.2.2
