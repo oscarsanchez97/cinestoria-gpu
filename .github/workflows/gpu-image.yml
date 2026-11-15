@@ -65,6 +65,8 @@ jobs:
         run: |
           IMG="${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}"
           docker run --rm "$IMG" python -c "import torch, torchaudio, diffusers, transformers, peft, spandrel, chatterbox.mtl_tts; print('torch', torch.__version__, 'diffusers', diffusers.__version__, 'transformers', transformers.__version__)"
+          # 1.30.1: la marca de agua de Chatterbox (sin pkg_resources es None y la voz falla al cargar en el pod)
+          docker run --rm "$IMG" python -c "import perth; assert perth.PerthImplicitWatermarker is not None, 'resemble-perth sin PerthImplicitWatermarker (falta pkg_resources)'; print('perth', perth.PerthImplicitWatermarker.__name__)"
           docker run --rm "$IMG" /opt/qwen/bin/python -c "import qwen_tts, transformers; print('qwen-tts con transformers', transformers.__version__)"
           docker run --rm "$IMG" /opt/acestep/.venv/bin/python -c "import acestep, fastapi, uvicorn, requests, torch, transformers; from acestep.handler import AceStepHandler; from acestep.inference import generate_music; print('ACE-Step con torch', torch.__version__, 'y transformers', transformers.__version__)"
           docker run --rm "$IMG" sh -c "ffmpeg -hide_banner -encoders | grep -q libx264 && echo 'ffmpeg con libx264' && test -d /opt/Practical-RIFE && echo 'Practical-RIFE'"
@@ -72,7 +74,7 @@ jobs:
 
       - name: Probar la imagen sin GPU (modo de pruebas)
         run: |
-          docker run -d --name w -p 8000:8000 -e CINESTORIA_TOKEN=prueba -e CINESTORIA_FAKE=1 -e CINESTORIA_NO_PRELOAD=1 "${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}"
+          docker run -d --name cinestoria-worker -p 8000:8000 -e CINESTORIA_TOKEN=prueba -e CINESTORIA_FAKE=1 -e CINESTORIA_NO_PRELOAD=1 "${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}"
           for i in $(seq 1 30); do curl -fsS -H "Authorization: Bearer prueba" http://localhost:8000/health && break; sleep 2; done
           curl -fsS -H "Authorization: Bearer prueba" -H "Content-Type: application/json" \
             -d '{"prompt":"faro","width":256,"height":144}' http://localhost:8000/image | head -c 200; echo
@@ -80,7 +82,7 @@ jobs:
           curl -fsS -H "Authorization: Bearer prueba" -H "Content-Type: application/json" \
             -d '{"prompt":"calm piano","seconds":4}' http://localhost:8000/music | head -c 200; echo
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health)" = "401"
-          docker rm -f w
+          docker rm -f cinestoria-worker
 
       - name: Marcar como «latest» (solo si todo lo anterior ha ido bien)
         run: docker buildx imagetools create -t "${{ steps.v.outputs.image }}:latest" "${{ steps.v.outputs.image }}:${{ steps.v.outputs.version }}"

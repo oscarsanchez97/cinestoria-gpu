@@ -521,6 +521,10 @@ def _chatterbox(pack: str = "") -> Any:
         return _M[key]
     _vram("tts")
     from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+    import perth   # 1.30.1: sin pkg_resources, su marca de agua es None y Chatterbox falla con un TypeError sin pistas
+    if getattr(perth, "PerthImplicitWatermarker", None) is None:
+        raise RuntimeError("la marca de agua de Chatterbox (resemble-perth) no carga: falta pkg_resources "
+                           "(setuptools<81) en la imagen del pod")
     if "mtl" not in _M:
         try:
             _M["mtl"] = ChatterboxMultilingualTTS.from_pretrained(device=_device(), t3_model="v3")

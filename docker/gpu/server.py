@@ -346,7 +346,13 @@ def create_app(token: str | None = None, fake: bool | None = None, preload: bool
             job.update(state="error", error=f"sin memoria en la GPU: {e}"[:300], code=507)
         except Exception as e:  # noqa: BLE001
             code = 400 if type(e).__name__ in ("BadRequest", "HTTPException") and getattr(e, "status_code", 400) < 500 else 500
-            job.update(state="error", error=f"{type(e).__name__}: {getattr(e, 'detail', None) or e}"[:300], code=code)
+            where = ""
+            if code == 500:   # 1.30.1: dónde ha fallado (archivo:línea de los dos últimos pasos), para poder arreglarlo
+                import traceback
+                fr = traceback.extract_tb(e.__traceback__)[-2:]
+                where = " (en " + " ← ".join(f"{os.path.basename(f.filename)}:{f.lineno}" for f in reversed(fr)) + ")"
+            job.update(state="error", error=(f"{type(e).__name__}: {getattr(e, 'detail', None) or e}"[:240] + where)[:400],
+                       code=code)
         finally:
             job["done"] = time.time()
             activity["t"] = time.time()

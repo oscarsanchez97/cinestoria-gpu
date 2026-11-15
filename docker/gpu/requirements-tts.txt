@@ -3,6 +3,10 @@
 librosa==0.11.0
 s3tokenizer==0.3.0
 resemble-perth==1.0.1
+# 1.30.1: resemble-perth (la marca de agua de Chatterbox) importa pkg_resources, que python:3.12-slim no trae y que
+# setuptools quitó en la 81: sin él, perth.PerthImplicitWatermarker es None y Chatterbox falla al cargar con
+# «TypeError: 'NoneType' object is not callable» (la primera prueba real en RunPod)
+setuptools==80.9.0
 conformer==0.3.2
 omegaconf==2.4.0
 pyloudnorm==0.2.0
