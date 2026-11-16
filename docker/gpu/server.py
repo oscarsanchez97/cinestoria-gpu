@@ -88,11 +88,11 @@ def child_python(name: str) -> str:
     py = (os.environ.get(f"CINESTORIA_PY_{name.upper()}") or "").strip()
     if not py or not Path(py).exists():
         return ""
-    try:
-        if Path(py).resolve() == Path(sys.executable).resolve():
-            return ""
-    except OSError:
-        pass
+    # 1.31.3: sin resolver enlaces. El python de un entorno de uv es un enlace al Python del sistema: con resolve()
+    # parecía «el mismo» que el del servidor, la música se cargaba aquí (sin ACE-Step) y fallaba con «No module named
+    # 'acestep'» en la primera prueba real. Que no se llame a sí mismo ya lo evita CINESTORIA_CHILD.
+    if os.path.abspath(py) == os.path.abspath(sys.executable):
+        return ""
     return py
 
 

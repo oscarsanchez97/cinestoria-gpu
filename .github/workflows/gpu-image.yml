@@ -69,6 +69,8 @@ jobs:
           docker run --rm "$IMG" python -c "import perth; assert perth.PerthImplicitWatermarker is not None, 'resemble-perth sin PerthImplicitWatermarker (falta pkg_resources)'; print('perth', perth.PerthImplicitWatermarker.__name__)"
           docker run --rm "$IMG" /opt/qwen/bin/python -c "import qwen_tts, transformers; print('qwen-tts con transformers', transformers.__version__)"
           docker run --rm "$IMG" /opt/acestep/.venv/bin/python -c "import acestep, fastapi, uvicorn, requests, torch, transformers; from acestep.handler import AceStepHandler; from acestep.inference import generate_music; print('ACE-Step con torch', torch.__version__, 'y transformers', transformers.__version__)"
+          # 1.31.3: y que el servidor de verdad mande la música a ese Python (si no, la carga él y no tiene ACE-Step)
+          docker run --rm -e CINESTORIA_NO_PRELOAD=1 "$IMG" python -c "import server; py = server.child_python('music'); assert py == '/opt/acestep/.venv/bin/python', py; print('música en', py)"
           docker run --rm "$IMG" sh -c "ffmpeg -hide_banner -encoders | grep -q libx264 && echo 'ffmpeg con libx264' && test -d /opt/Practical-RIFE && echo 'Practical-RIFE'"
           docker run --rm -e CINESTORIA_FAKE=1 -e CINESTORIA_NO_PRELOAD=1 "$IMG" python -c "import server; print('handlers:', sorted(server.app.state.handlers))"
 
